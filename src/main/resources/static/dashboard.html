@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#05080f">
+    <title>Dashboard · SNIPR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="texture-grid" aria-hidden="true"></div>
+    <div class="bg-mesh" aria-hidden="true">
+        <div class="mesh-blob blob-1"></div>
+        <div class="mesh-blob blob-2"></div>
+        <div class="mesh-blob blob-3"></div>
+    </div>
+
+    <header class="header dashboard-header">
+        <a href="/" class="logo" style="text-decoration: none;"><span class="logo-mark" aria-hidden="true">⚡</span>
+            SNIPR</a>
+        <nav class="nav-links">
+            <span id="userDisplay" class="nav-user-pill" aria-live="polite"></span>
+            <a href="/index.html" class="btn btn-primary" style="padding: 0.55rem 1.25rem;">New link</a>
+            <button type="button" class="btn btn-outline" onclick="logout()">Sign out</button>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="page-title-block">
+            <h1>Dashboard</h1>
+            <p>High-level performance for your short links—volume, recency, and traffic over the last week.</p>
+        </div>
+
+        <section class="stats-grid" id="statsGrid" aria-label="Summary statistics">
+            <div class="stat-card">
+                <div class="stat-label">Total links</div>
+                <div class="stat-value" id="totalLinks">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total clicks</div>
+                <div class="stat-value" id="totalClicks">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active links</div>
+                <div class="stat-value" id="activeLinks">0</div>
+            </div>
+        </section>
+
+        <section class="chart-container" aria-labelledby="chart-title">
+            <div class="chart-header">
+                <h3 id="chart-title">Traffic (7 days)</h3>
+                <p>Daily click volume. Hover a point for the exact count.</p>
+            </div>
+            <div class="chart-canvas-wrap">
+                <canvas id="clicksChart" aria-describedby="chart-title"></canvas>
+            </div>
+        </section>
+
+        <section class="glass-card table-shell" aria-labelledby="table-title">
+            <div class="table-panel-header">
+                <h3 id="table-title">Your links</h3>
+            </div>
+            <div class="table-container-inner">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Short code</th>
+                            <th>Destination</th>
+                            <th>Clicks</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th class="td-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="urlsTable">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const username = localStorage.getItem('username');
+
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+
+        document.getElementById('userDisplay').textContent = username || '';
+
+        let clicksChart = null;
+
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/analytics/dashboard', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+                    document.getElementById('totalLinks').textContent = data.totalLinks.toLocaleString();
+                    document.getElementById('totalClicks').textContent = data.totalClicks.toLocaleString();
+                    document.getElementById('activeLinks').textContent = data.activeLinks.toLocaleString();
+
+                    renderChart(data.dailyClicks);
+                }
+            } catch (error) {
+                console.error('Failed to load dashboard', error);
+            }
+
+            loadURLs();
+        }
+
+        async function loadURLs() {
+            try {
+                const response = await fetch('/api/user/urls', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    const tbody = document.getElementById('urlsTable');
+                    tbody.innerHTML = '';
+
+                    if (result.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">No links yet—create one from the home page.</td></tr>';
+                        return;
+                    }
+
+                    result.data.forEach(url => {
+                        const fullHost = window.location.origin;
+                        const fullShortUrl = `${fullHost}/${url.shortCode}`;
+                        const safeUrlLit = JSON.stringify(fullShortUrl);
+
+                        const row = `
+                            <tr>
+                                <td><a href="/${url.shortCode}" target="_blank" rel="noopener noreferrer" class="link-highlight">${url.shortCode}</a></td>
+                                <td class="td-muted td-ellipsis" title="${url.originalUrl.replace(/"/g, '&quot;')}">${url.originalUrl}</td>
+                                <td>${url.clickCount.toLocaleString()}</td>
+                                <td>
+                                    <span class="badge ${url.isActive ? 'badge-success' : 'badge-danger'}">
+                                        ${url.isActive ? 'Live' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td class="td-muted">${new Date(url.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                                <td class="td-right">
+                                    <div class="actions actions-end">
+                                        <button type="button" class="icon-btn" onclick="copyURL(${safeUrlLit})" title="Copy link" aria-label="Copy link">
+                                            <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                                        </button>
+                                        <button type="button" class="icon-btn delete" onclick="deleteURL(${url.id})" title="Revoke link" aria-label="Revoke link">
+                                            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load URLs', error);
+            }
+        }
+
+        function renderChart(dailyClicks) {
+            const labels = Object.keys(dailyClicks).map(date => {
+                const d = new Date(date);
+                return `${d.getMonth() + 1}/${d.getDate()}`;
+            });
+            const data = Object.values(dailyClicks);
+
+            const ctx = document.getElementById('clicksChart').getContext('2d');
+
+            if (clicksChart) clicksChart.destroy();
+
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif";
+
+            const accent = '#2dd4bf';
+            let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(45, 212, 191, 0.35)');
+            gradient.addColorStop(1, 'rgba(45, 212, 191, 0)');
+
+            clicksChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Clicks',
+                        data: data,
+                        borderColor: accent,
+                        backgroundColor: gradient,
+                        borderWidth: 2.5,
+                        pointBackgroundColor: '#05080f',
+                        pointBorderColor: accent,
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index',
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(8, 12, 22, 0.92)',
+                            titleColor: '#f1f5f9',
+                            bodyColor: '#94a3b8',
+                            borderColor: 'rgba(255, 255, 255, 0.08)',
+                            borderWidth: 1,
+                            titleFont: { size: 13, weight: '700' },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            cornerRadius: 12,
+                            displayColors: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0, maxTicksLimit: 7 },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                            border: { display: false }
+                        },
+                        x: {
+                            ticks: { maxRotation: 0 },
+                            grid: { display: false },
+                            border: { color: 'rgba(255, 255, 255, 0.06)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function copyURL(url) {
+            navigator.clipboard.writeText(url);
+        }
+
+        async function deleteURL(id) {
+            if (!confirm('Revoke this short link? It will stop forwarding.')) return;
+
+            try {
+                const response = await fetch(`/api/url/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    loadURLs();
+                    loadDashboard();
+                } else {
+                    alert('Could not revoke the link.');
+                }
+            } catch (error) {
+                alert('Network error.');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            window.location.href = '/login.html';
+        }
+
+        loadDashboard();
+    </script>
+</body>
+
+</html>

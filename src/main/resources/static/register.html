@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#05080f">
+    <title>Create account · SNIPR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+    <div class="texture-grid" aria-hidden="true"></div>
+    <div class="bg-mesh" aria-hidden="true">
+        <div class="mesh-blob blob-1"></div>
+        <div class="mesh-blob blob-2"></div>
+        <div class="mesh-blob blob-3"></div>
+    </div>
+
+    <header class="header">
+        <a href="/" class="logo" style="text-decoration: none;"><span class="logo-mark" aria-hidden="true">⚡</span>
+            SNIPR</a>
+        <nav class="nav-links" aria-label="Sign in">
+            <a href="/login.html" class="nav-link">Already registered?</a>
+            <a href="/login.html" class="btn btn-outline" style="padding: 0.55rem 1.2rem;">Sign in</a>
+        </nav>
+    </header>
+
+    <div class="auth-container">
+        <div class="glass-card auth-card animate-up">
+            <h2>Create your account</h2>
+            <p class="auth-intro">Pick a username and you can start creating tracked short links in seconds.</p>
+            <div id="alert" role="status" aria-live="polite"></div>
+
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" class="form-control" placeholder="acme-team" required
+                        autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" class="form-control" placeholder="you@company.com" required
+                        autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="form-control" placeholder="At least 8 characters"
+                        required autocomplete="new-password" minlength="8">
+                </div>
+                <button type="submit" class="btn btn-primary w-full" style="margin-top: 0.5rem;">Create account</button>
+            </form>
+
+            <div class="auth-link">
+                Have an account? <a href="/login.html">Sign in</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('Account created. Redirecting to sign in…', 'success');
+                    setTimeout(() => window.location.href = '/login.html', 1500);
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Registration service unavailable.', 'error');
+            }
+        });
+
+        function showAlert(message, type) {
+            const alertDiv = document.getElementById('alert');
+            alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => alertDiv.innerHTML = '', 4000);
+        }
+    </script>
+</body>
+
+</html>
