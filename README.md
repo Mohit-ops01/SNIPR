@@ -307,4 +307,4 @@ For issues and questions, please open an issue on GitHub.
 
 ---
 
-**Made with ❤️ for final year project**
+**Made with ❤️-by MOHIT- for final year project**
